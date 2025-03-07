@@ -1,0 +1,9 @@
+*.mp4
+*.png
+*.csv
+.vscode
+*.pyc
+*.mkv
+*.txt
+client_secrets.json
+token.pickle
