@@ -48,9 +48,20 @@ def get_youtube_client():
     return youtube
 
 
-# Create a new YouTube playlist
 def create_playlist(youtube, title, description):
+    # Check if a playlist with the same title already exists
     try:
+        existing_playlists = youtube.playlists().list(
+            part="snippet",
+            mine=True
+        ).execute()
+
+        for playlist in existing_playlists.get("items", []):
+            if playlist["snippet"]["title"] == title:
+                print(f"Playlist already exists: {title}")
+                return playlist["id"]
+
+        # If no playlist with the same title exists, create a new one
         playlist_request = youtube.playlists().insert(
             part="snippet,status",
             body={
@@ -68,7 +79,7 @@ def create_playlist(youtube, title, description):
         print(f"Playlist created successfully: {title}")
         return playlist_id
     except HttpError as e:
-        print(f"An error occurred while creating the playlist: {e}")
+        print(f"An error occurred: {e}")
         return None
 
 
@@ -146,9 +157,9 @@ def upload_clips(folder_input_path, event_key, tba_key):
     # Authenticate YouTube API client
     youtube = get_youtube_client()
 
-    # Create a playlist for the event
-    playlist_title = title_prefix + " Matches"
-    playlist_description = "All matches for " + title_prefix
+    # Create a playlist for the event if it doesn't exist
+    playlist_title = title_prefix
+    playlist_description = "Matches for " + title_prefix
     playlist_id = create_playlist(youtube, playlist_title, playlist_description)
 
     if not playlist_id:
@@ -156,8 +167,8 @@ def upload_clips(folder_input_path, event_key, tba_key):
         exit(1)
 
     # Upload videos and add them to the playlist
-    title_prefix += " Qualification Match "
     if not os.path.exists(f"{folder_path}/uploaded.txt"):
+        
         with open(f"{folder_path}/uploaded.txt", "w"):
             pass
     with open(f"{folder_path}/uploaded.txt", "r+") as f:
@@ -167,8 +178,8 @@ def upload_clips(folder_input_path, event_key, tba_key):
             if any(video_file in match for match in matches_data):
                 print(f"Skipping {video_file} as it has already been uploaded.")
                 continue
-            match_number = video_file.split("_")[1]
-            video_title = title_prefix + match_number
+            match_id = video_file.split("_")[1]
+            video_title = f'{title_prefix}: {match_id}'
             video_path = os.path.join(folder_path, video_file)
 
             # Upload video and get video ID

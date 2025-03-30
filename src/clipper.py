@@ -22,9 +22,9 @@ def clip_videos(video_input_path, clips_output_folder):
 
     recording = False
     start_time_sec = None
-    match_number = None
+    match_id = None
 
-    frame_count = 0
+    frame_count = 888000
 
     os.makedirs(clips_output_folder, exist_ok=True)
     output_dir = clips_output_folder
@@ -38,35 +38,57 @@ def clip_videos(video_input_path, clips_output_folder):
         frame_time = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         cropped_top = gray[: int(gray.shape[0] * 0.3), :]
-        # Image.fromarray(cropped_top).save("output.png")
+        Image.fromarray(cropped_top).save("output.png")
         result = reader.readtext(cropped_top, detail=0)
         detected_texts = [r for r in result]
 
-        # Detect match number
-        skip = False
-        for text in detected_texts:
-            if "Test" in text:
-                skip = True
-            if "Qualification" in text or "Match" in text:
-                match_number = (
-                    text.replace("Qualification", "").replace("Match", "").strip()
-                )
 
         # Detect auto period countdown (start of match)
-        if not skip and not recording:
+        if not recording:
             for text in detected_texts:
-                match = re.search(r"0:(\d{2})", text)
+                match = re.search(r"(?:\w):(0[1-9]|1[0-5])", text)
                 if match:
                     seconds_remaining = int(match.group(1))
                     if 1 <= seconds_remaining <= 15:
                         start_time_sec = max(
                             0, frame_time - (15 - seconds_remaining + 7.5)
                         )
-                        recording = True
-                        print(
-                            f"❗Match {match_number} started at {timedelta(seconds=start_time_sec)}"
+                        # Detect match number to search for
+                        # Match formats:
+                        # - "[Lower/Upper] Bracket - Round X - Match Y"
+                        # - "Final X"
+                        # - "Qualification Match X of Y"
+                        # - "Test Match" - SKIP
+                        # - "Practice X of Y" - SKIP
+
+                    detected_texts_combined = ' '.join(detected_texts).upper()
+                    normalized_text = re.sub(r"[-=]", " ", ' '.join(detected_texts).upper())  # Replace '-' and '=' with spaces
+                    normalized_text = re.sub(r"\s+", " ", normalized_text).strip()
+
+                    keywords = ["UPPER BRACKET", "LOWER BRACKET", "QUALIFICATION", "FINAL", "TEST", "PRACTICE"]
+                    if any(keyword in detected_texts_combined for keyword in keywords):
+                        if "TEST" in detected_texts_combined or "PRACTICE" in detected_texts_combined:
+                            print("⚠️ Skipping Test or Practice match")
+                            break
+                        match = re.search(
+                            r"(?:UPPER BRACKET|LOWER BRACKET)\s*ROUND\s*(\d+)\s*MATCH\s*(\d+)|"  # Bracket Matches
+                            r"FINAL\s*(\d+)|"  # Final X
+                            r"QUALIFICATION\s*(\d+)\s*OF\s*(\d+)",  # Qualification Match X
+                            normalized_text,
                         )
-                        break
+                        if match:
+                            if match.group(1) and match.group(2):  # Bracket match format
+                                match_id = f"Round {match.group(1)} - Match {match.group(2)}"
+                            elif match.group(3):  # Final X
+                                match_id = f"Final {match.group(3)}"
+                            elif match.group(4) and match.group(5):  # Qualification X
+                                match_id = f"Qualification {match.group(4)} Of {match.group(5)}"
+                            else:
+                                match_id = "Unknown Match"
+
+                            recording = True
+                            print(f"❗ Match detected: {match_id} started at {timedelta(seconds=start_time_sec)}")
+                            break
 
         # Jump exactly 2:50 after start to find end of match
         if recording:
@@ -79,7 +101,7 @@ def clip_videos(video_input_path, clips_output_folder):
                 frame_time = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 cropped_top = gray[: int(gray.shape[0] * 0.3), :]
-                # Image.fromarray(cropped_top).save("output.png")
+                Image.fromarray(cropped_top).save("output.png")
                 result = reader.readtext(cropped_top, detail=0)
 
                 if (
@@ -106,7 +128,7 @@ def clip_videos(video_input_path, clips_output_folder):
 
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 cropped_top = gray[: int(gray.shape[0] * 0.3), :]
-                # Image.fromarray(cropped_top).save("output.png")
+                Image.fromarray(cropped_top).save("output.png")
                 result = reader.readtext(cropped_top, detail=0)
 
                 if any(
@@ -119,7 +141,7 @@ def clip_videos(video_input_path, clips_output_folder):
                     break
 
             # Clip both segments and join them
-            output_filename = f"{output_dir}/match_{match_number}.mp4"
+            output_filename = f"{output_dir}/match_{match_id}.mp4"
 
             segment1 = f"{output_dir}/segment1.mp4"
             segment2 = f"{output_dir}/segment2.mp4"

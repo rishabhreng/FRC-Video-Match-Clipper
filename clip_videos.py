@@ -29,6 +29,15 @@ if __name__ == "__main__":
         required=False,
         help="TBA API key (if not set, will use TBA_API_KEY environment variable)",
     )
+    
+    parser.add_argument(
+        "-u",
+        "--upload",
+        type=bool,
+        required=False,
+        default=False,
+        help="Upload the clips to YouTube",
+    )
 
     args = parser.parse_args()
 
@@ -38,12 +47,19 @@ if __name__ == "__main__":
     clips_folder = f"matches_{EVENT_KEY}_{suffix}"
     video_path = f"{EVENT_KEY}_{suffix}.mp4"
 
-    TBA_API_KEY = args.tba_key if args.tba_key else os.getenv("TBA_API_KEY")
+    if args.tba_key:
+        TBA_API_KEY = args.tba_key
+    elif os.path.exists("tba_key.txt"):
+        TBA_API_KEY = open("tba_key.txt").read().strip()
+    else:
+        try:
+            TBA_API_KEY = os.environ["TBA_API_KEY"]
+        except KeyError:
+            raise ValueError("TBA API key not found")
 
     # Downloads VOD if it's not already downloaded
     print("Downloading VOD...")
     from src.downloader import download_youtube_vod
-
     download_youtube_vod(video_output_name=video_path, YOUTUBE_URL=YOUTUBE_URL)
     print("VOD downloaded!")
 
@@ -56,7 +72,10 @@ if __name__ == "__main__":
         clip_videos(video_input_path=video_path, clips_output_folder=clips_folder)
         print("All matches clipped!")
 
-    upload = input("Do you want to upload the (existing) clips to YouTube? (y/n): ")
+    if args.upload:
+        upload = args.upload
+    else:
+        upload = input("Do you want to upload the (existing) clips to YouTube? (y/n): ")
     if upload == "y":
         print("Uploading clips to YouTube...")
         from src.uploader import upload_clips
